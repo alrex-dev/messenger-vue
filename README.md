@@ -1,5 +1,6 @@
-# messenger-vue
-Messenger app using Vue.js + Node.js backend
+# Quasar App (messenger)
+
+A Quasar Project
 
 ## Install the dependencies
 ```bash
