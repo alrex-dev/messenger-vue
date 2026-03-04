@@ -1,6 +1,6 @@
 <template>
 <q-page class="flex flex-center">
-    <div v-if="loggedUser !== null" class="height-100" style="width: 700px;">
+    <div v-if="loggedUser !== null" class="height-100 listing-cont">
         <div class="text-h4 q-mb-xl">Hi, {{ loggedUser.user_name }}</div>
         <div class="text-h5 q-mb-lg">Send message to:</div>
         <q-markup-table style="width: 100%;">
@@ -21,7 +21,7 @@
 
         <q-separator />
 
-        <q-card-section style="max-height: 50vh; width: 500px;" class="scroll">
+        <q-card-section style="max-height: 50vh;" class="scroll chatbox-inner">
             <q-option-group
                 v-model="selectedUser"
                 :options="userOptions"
@@ -47,7 +47,7 @@
 
         <q-separator />
 
-        <q-card-section style="max-height: 50vh; width: 500px;" class="scroll" ref="scroller">
+        <q-card-section style="max-height: 50vh;" class="scroll chatbox-inner" ref="scroller">
             <div v-for="(m, idx) in messages" :key="idx" class="q-mb-md flex" :class="getMsgClass(m.sender)">
                 <q-card flat :bordered="currentUser(m.sender) ? false : true" :class="currentUser(m.sender) ? 'bg-grey-3' : ''">
                     <q-card-section>
@@ -81,7 +81,9 @@ import { ref, onMounted, computed, nextTick } from 'vue'
 import { _getUsers, _getConversation, _sendMessage, _getMessages } from '/src/queries/message'
 import { scroll } from 'quasar'
 
-const WS_URL = 'ws://localhost:5000'
+const WS_URL = process.env.WS_URL
+
+console.log(process.env.WS_URL)
 
 const showUserLogin = ref(false)
 const users = ref([])
@@ -321,5 +323,23 @@ onMounted(async () => {
 
 .peer {
     margin-right: 50px;
+}
+
+.chatbox-inner {
+    width: 350px;
+}
+
+.listing-cont {
+    width: 350px;
+}
+
+@media (min-width: 768px) {
+    .chatbox-inner {
+        width: 500px;
+    }
+
+    .listing-cont {
+        width: 700px;
+    }
 }
 </style>
