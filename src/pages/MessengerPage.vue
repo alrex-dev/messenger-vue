@@ -1,92 +1,129 @@
 <template>
-<q-page class="flex flex-center">
-    <div v-if="loggedUser !== null" class="height-100 listing-cont">
-        <div class="text-h4 q-mb-xl">Hi, {{ loggedUser.user_name }}</div>
-        <div class="text-h5 q-mb-lg">Send message to:</div>
-        <q-markup-table style="width: 100%;">
-            <tbody>
-                <tr v-for="f in getFriends" :key="f.user_id" class="cursor-pointer" @click="openChatbox(f)">
-                    <td>{{ f.user_name }}</td>
-                </tr>
-            </tbody>
-        </q-markup-table>
-    </div>
-</q-page>
+    <q-page>
+        <div style="height: calc(100vh - 50px)">
+            <q-splitter v-model="splitterModel" style="height: 100%">
+                <template v-slot:before>
+                    <div class="q-pa-md full-height">
+                        <friends-column
+                            :logged-user="loggedUser"
+                            v-model:is-ready="isReady"
+                            @get-convo="getConvo"
+                            ref="friendsColumn"
+                        />
+                    </div>
+                </template>
 
-<q-dialog v-model="showUserLogin" persistent>
-    <q-card>
-        <q-card-section>
-            <div class="text-h6">Login</div>
-        </q-card-section>
+                <template v-slot:after>
+                    <div class="q-pa-md full-height">
+                        <MessagesColumn
+                            v-model:convo="convo"
+                            :selected-peer="selectedPeer"
+                            :logged-user="loggedUser"
+                            :is-typing="isTyping"
+                            @send-typing-status="sendTypingStatus"
+                            ref="messagesColumn"
+                        />
+                    </div>
+                </template>
+            </q-splitter>
+        </div>
+    </q-page>
 
-        <q-separator />
+    <!--User Entry-->
+    <q-dialog v-model="showUserForm" persistent>
+        <q-card>
+            <q-card-section>
+                <div class="text-h6">Create New User</div>
+            </q-card-section>
 
-        <q-card-section style="max-height: 50vh;" class="scroll chatbox-inner">
-            <q-option-group
-                v-model="selectedUser"
-                :options="userOptions"
-                color="primary"
-            />
-        </q-card-section>
+            <q-separator />
 
-        <q-separator />
+            <q-card-section style="max-height: 50vh" class="scroll chatbox-inner">
+                <q-input
+                    outlined
+                    v-model="userName"
+                    label="Enter user name"
+                    @keydown.enter="createUser()"
+                />
+            </q-card-section>
 
-        <q-card-actions align="right">
-            <q-btn flat label="Login" color="primary" @click="login()" />
-        </q-card-actions>
-    </q-card>
-</q-dialog>
+            <q-separator />
 
-<q-dialog v-model="showChatbox" persistent>
-    <q-card>
-        <q-card-section class="row items-center">
-            <div class="text-h6">{{ getPeerName }}</div>
-            <q-space />
-            <q-btn icon="close" flat round dense v-close-popup />
-        </q-card-section>
+            <q-card-actions align="right">
+                <q-btn flat label="Cancel" color="primary" v-close-popup />
+                <q-btn flat label="Create" color="primary" @click="createUser()" />
+            </q-card-actions>
 
-        <q-separator />
+            <q-inner-loading :showing="addingUser" color="primary" />
+        </q-card>
+    </q-dialog>
 
-        <q-card-section style="max-height: 50vh;" class="scroll chatbox-inner" ref="scroller">
-            <div v-for="(m, idx) in messages" :key="idx" class="q-mb-md flex" :class="getMsgClass(m.sender)">
-                <q-card flat :bordered="currentUser(m.sender) ? false : true" :class="currentUser(m.sender) ? 'bg-grey-3' : ''">
-                    <q-card-section>
-                        {{ m.msg_details.msg }}
-                    </q-card-section>
-                </q-card>
-            </div>
-        </q-card-section>
-        <q-card-section>
-            <div v-if="isTyping" class="q-mb-md">
-                <q-spinner-dots color="primary" size="2.5em" /> <span class="q-ml-sm text-grey-6">{{ getPeerName }} typing ...</span>
-            </div>
-            <div class="text-right flex items-center">
-            <q-input 
-                outlined 
-                v-model="msg" 
-                label="Type message..." 
-                class="q-mr-md" 
-                style="width: calc(100% - 86px)" 
-                @keydown="handleKeydown"
-            />
-            <q-btn label="Send" color="primary" @click="send" />
-            </div>
-        </q-card-section>
-    </q-card>
-</q-dialog>
+    <!--Login Screen-->
+    <q-dialog v-model="showUserLogin" persistent>
+        <q-card>
+            <q-card-section>
+                <div class="text-h6">Login</div>
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-section style="max-height: 50vh" class="scroll chatbox-inner">
+                <q-select
+                    outlined
+                    v-model="selectedUser"
+                    :options="userOptions"
+                    label="Select User or create one"
+                    @update:model-value="onSelectUser"
+                >
+                    <template v-slot:option="scope">
+                        <q-item v-bind="scope.itemProps">
+                            <q-item-section>
+                                <q-item-label :class="{ 'text-primary': scope.opt.value === -1 }">{{
+                                    scope.opt.label
+                                }}</q-item-label>
+                            </q-item-section>
+                        </q-item>
+                    </template>
+                </q-select>
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-actions align="right">
+                <q-btn flat label="Login" color="primary" @click="login()" />
+            </q-card-actions>
+        </q-card>
+    </q-dialog>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
-import { _getUsers, _getConversation, _sendMessage, _getMessages } from '/src/queries/message'
+import {
+    _getUsers,
+    _getConversation,
+    _sendMessage,
+    _getMessages,
+    _createUser,
+    _login,
+    _getGuestToken,
+    _checkGuestToken
+} from '/src/queries/message'
 import { scroll } from 'quasar'
+import { useAppStore } from '/src/stores/app'
+
+import FriendsColumn from './sections/FriendsColumn.vue'
+import MessagesColumn from './sections/MessagesColumn.vue'
 
 const WS_URL = process.env.WS_URL
 
-console.log(process.env.WS_URL)
+//console.log(process.env.WS_URL);
+
+const appStore = useAppStore()
+
+const splitterModel = ref(30)
+const isReady = ref(false)
 
 const showUserLogin = ref(false)
-const users = ref([])
 const userOptions = ref([])
 const selectedUser = ref(null)
 const loggedUser = ref(null)
@@ -94,33 +131,99 @@ const loggedUser = ref(null)
 const status = ref('disconnected')
 let ws = null
 
-const showChatbox = ref(false)
-const msg = ref('')
 const selectedPeer = ref(null)
 const convo = ref(null)
 
-const messages = ref([])
-
-const scroller = ref(null)
-
-let inputTO = null
-let showTypingTO = null
-let lastTypingSentAt = 0
-
 const isTyping = ref(false)
 
-const test2 = ref(0)
+const showUserForm = ref(false)
+const userName = ref('')
 
-const login = () => {
+const addingUser = ref(false)
+
+const nameRegex = /^[\p{L}][\p{L}\s'-]{1,49}$/u
+
+const friendsColumn = ref(null)
+const messagesColumn = ref(null)
+
+const onSelectUser = (val) => {
+    if (val.value === -1) {
+        showUserForm.value = true
+        selectedUser.value = null
+        userName.value = ''
+    }
+}
+
+const createUser = async () => {
+    const user_name = userName.value.trim()
+
+    if (user_name === '') {
+        alert('User name cannot be empty!')
+
+        return
+    }
+
+    if (!nameRegex.test(user_name)) {
+        alert(
+            'Invalid user name! User name should be 2-50 characters long and can only contain letters, spaces, apostrophes, and hyphens.'
+        )
+
+        return
+    }
+
+    addingUser.value = true
+
+    try {
+        const result = await _createUser(user_name)
+
+        if (result.data.status === 'error') {
+            alert(result.data.error_msg || 'Error creating user. Please try again.')
+
+            return
+        }
+
+        //update list
+        const updatedUsers = await _getUsers()
+
+        prepareUserOptions(updatedUsers.data.users)
+
+        selectedUser.value = { value: result.data.user_id, label: user_name }
+
+        showUserForm.value = false
+
+        login()
+    } catch (error) {
+        alert('Error creating user. Please try again.')
+    } finally {
+        addingUser.value = false
+    }
+}
+
+const login = async () => {
     if (selectedUser.value === null) {
         alert('Please select a user!')
 
         return
     }
 
-    loggedUser.value = users.value.find((i) => {
-        return i.user_id === selectedUser.value
-    })
+    const result = await _login(selectedUser.value.value, selectedUser.value.label)
+
+    if (result.data.status === 'error') {
+        alert(result.data.error_msg || 'Error logging in. Please try again.')
+
+        return
+    } else {
+        appStore.setToken(result.data.token)
+    }
+
+    //loggedUser.value = users.value.find((i) => {
+    //  return i.user_id === selectedUser.value.value;
+    //});
+
+    loggedUser.value = {
+        user_id: selectedUser.value.value,
+        user_name: selectedUser.value.label
+    }
 
     connectWS()
 
@@ -130,11 +233,14 @@ const login = () => {
 function connectWS() {
     status.value = 'connecting'
 
-    ws = new WebSocket(WS_URL)
+    const token = appStore.getToken()
+
+    //Need to pass token to backend websocket
+    ws = new WebSocket(WS_URL + `?token=${token}`)
 
     ws.addEventListener('open', () => {
         status.value = 'connected'
-        
+
         // "Login" to WS with your username
         ws.send(JSON.stringify({ type: 'auth', user: loggedUser.value.user_id }))
     })
@@ -152,12 +258,10 @@ function connectWS() {
                         conv_id: m.conv_id,
                         msg_details: m.msg,
                         msg_time: m.msg_time,
-                        sender: m.sender,
+                        sender: m.sender
                     }
 
-                    messages.value.push(_msg)
-
-                    scrollToBottom()
+                    messagesColumn.value.displayMessage(_msg)
                 }
             }
 
@@ -178,7 +282,7 @@ function connectWS() {
                 }
             }
         } catch {
-        // ignore
+            // ignore
         }
     })
 
@@ -191,140 +295,73 @@ function connectWS() {
     ws.addEventListener('error', () => ws.close())
 }
 
-const openChatbox = async (peer) => {
-    selectedPeer.value = peer
+const getConvo = async (data) => {
+    selectedPeer.value = data.peer
 
-    const result = await _getConversation(loggedUser.value.user_id, selectedPeer.value.user_id)
-
-    convo.value = result.data.convo
-
-    const result2 = await _getMessages(convo.value.id)
-
-    const oldMsgs = result2.data.messages
-
-    oldMsgs.sort((a, b) => a.msg_id - b.msg_id)
-
-    messages.value = oldMsgs
-
-    showChatbox.value = true
-
-    scrollToBottom()
-}
-
-const send = async () => {
-    if (msg.value.trim() === '') return
-
-    const msg_details = {
-        msg: msg.value
-    }
-    
-    await _sendMessage(convo.value, loggedUser.value.user_id, msg_details)
-
-    //console.log(result)
-
-    //Reset
-    msg.value = ''
-}
-
-const getMsgClass = (sender) => {
-    return (sender === loggedUser.value.user_id) ? 'justify-end you' : 'justify-start peer'
-}
-
-const currentUser = (sender) => {
-    return sender === loggedUser.value.user_id
-}
-
-const scrollToBottom = () => {
-    nextTick(() => {
-        const el = scroller.value.$el
-        const target = el.scrollHeight
-
-        scroll.setVerticalScrollPosition(el, target, 50)
+    nextTick(async () => {
+        await messagesColumn.value.retrieveConvo()
     })
 }
 
-const handleKeydown = (event) => {
-  if (event.key !== "Enter") {
-    onInputTyping()
-  } else {
-    send()
-  }
-}
-
-const onInputTyping = () => {
-    const now = Date.now();
-
-    //Throttle
-    if (now - lastTypingSentAt > 500) {
-        sendTypingStatus(true)
-        lastTypingSentAt = now
-    }
-
-    // If user stops typing for 900ms, send "false"
-    clearTimeout(inputTO)
-
-    //Send false status after 900ms
-    inputTO = setTimeout(() => {
-        sendTypingStatus(false);
-    }, 900)
-}
-
-const sendTypingStatus = (status) => {
+const sendTypingStatus = (params) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
 
     if (selectedPeer.value === null) return
 
-    ws.send(
-        JSON.stringify({
-            type: 'typing',
-            peer: selectedPeer.value.user_id,
-            status,
-            conv_id: convo.value.id
-        })
-    )
+    const _msg = {
+        type: 'typing',
+        peer: selectedPeer.value.user_id,
+        status: params.status,
+        conv_id: convo.value.id
+    }
+
+    ws.send(JSON.stringify(_msg))
+}
+
+const prepareUserOptions = (_users) => {
+    userOptions.value = _users.map((o) => {
+        return {
+            value: o.user_id,
+            label: o.user_name
+        }
+    })
+
+    userOptions.value.push({
+        value: -1,
+        label: 'Create New User'
+    })
 }
 
 //--------------
 //COMPUTED
 //--------------
 
-const getFriends = computed(() => {
-    if (loggedUser.value === null) return users.value
-    
-    return users.value.filter((i) => {
-        return i.user_id !== loggedUser.value.user_id
-    })    
-})
-
-const getPeerName = computed(() => {
-    return selectedPeer.value ? selectedPeer.value.user_name : ''
-})
-
 onMounted(async () => {
     showUserLogin.value = true
 
-    const result = await _getUsers()
+    const guestToken = appStore.getGuestToken()
 
-    users.value = result.data.users
+    if (!guestToken) {
+        const result = await _getGuestToken()
 
-    userOptions.value = result.data.users.map((o) => {
-        return {
-            value: o.user_id,
-            label: o.user_name,
+        appStore.setGuestToken(result.data.token)
+    } else {
+        const result = await _checkGuestToken(guestToken)
+
+        if (result.data.status === 'success') {
+            appStore.setGuestToken(result.data.token)
         }
-    })
+    }
+
+    const result2 = await _getUsers()
+
+    prepareUserOptions(result2.data.users)
+
+    isReady.value = true
 })
 </script>
-  
+
 <style scoped>
-.you {
-    margin-left: 50px;
-}
-
-.peer {
-    margin-right: 50px;
-}
-
 .chatbox-inner {
     width: 350px;
 }
